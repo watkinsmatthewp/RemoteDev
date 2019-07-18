@@ -44,3 +44,7 @@ RemoveDev sync-sftp
 The SFTP mode will prompt you for your password. You can also specify the password as a command line flag (if you feel like living on the edge):
 
 ```-- password ThisPasswordIsAwful```
+
+## Building
+
+`.vs/tasks.json` defines the build tasks. Just run `publish`. THe project is .NET Core so it hypothetically supports all platforms, but currently I've ony written a publish task for Win64. More to come
