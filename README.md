@@ -27,15 +27,15 @@ Currently the tool can sync to another directory (the `sync-dir` command) or to 
 
 ```
 RemoveDev sync-dir
-  --local C:\\dev\\workplace\\my-project\\src
-  --remote C:\\dev\\workplace\\my-project-clone\\src
+  --local C:\\dev\workplace\my-project\src
+  --remote C:\\dev\workplace\my-project-clone\src
 ```
 
 ### Example SFTP sync-ing
 
 ```
 RemoveDev sync-sftp
-  --local C:\\dev\\workplace\\my-project\\src
+  --local C:\\dev\workplace\my-project\src
   --host my-sftp-box.example.com
   --working-directory /workplace/my-project/src
   --user my_user_name
