@@ -1,0 +1,65 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "build",
+                "${workspaceFolder}/RemoteDev/RemoteDev.csproj"
+            ],
+            "problemMatcher": "$tsc",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "debug-dir",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "run",
+                "sync-dir",
+                "--verbose",
+                "true",
+                "--local",
+                "C:\\Temp\\experiment",
+                "--remote",
+                "C:\\Temp\\remote-experiment"
+            ],
+            "problemMatcher": "$tsc",
+            "options": {
+                "cwd": "${workspaceFolder}/RemoteDev"
+            }
+        },
+        {
+            "label": "publish-win-x64",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "publish",
+                "-c",
+                "Release",
+                "--self-contained",
+                "true",
+                "--runtime",
+                "win-x64",
+                "${workspaceFolder}/RemoteDev/RemoteDev.csproj"
+            ],
+            "problemMatcher": "$tsc"
+        },
+        {
+            "label": "watch",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "watch",
+                "run",
+                "${workspaceFolder}/RemoteDev/RemoteDev.csproj"
+            ],
+            "problemMatcher": "$tsc"
+        }
+    ]
+}
