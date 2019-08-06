@@ -1,6 +1,6 @@
 ﻿namespace RemoteDev.Core.Models
 {
-    public enum FileChangeType
+    public enum FileSystemChangeType
     {
         Created,
         Deleted,

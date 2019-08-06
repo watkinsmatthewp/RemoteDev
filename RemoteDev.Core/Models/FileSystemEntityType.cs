@@ -1,7 +1,8 @@
 ﻿namespace RemoteDev.Core.Models
 {
-    public enum FileEntityType
+    public enum FileSystemEntityType
     {
+        Unknown,
         Directory,
         File
     }

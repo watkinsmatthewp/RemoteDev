@@ -6,7 +6,7 @@ namespace RemoteDev.Core.FileWatching
     public interface IFileWatcher
     {
         FileWatcherConfig Config { get; }
-        event EventHandler<FileChange> OnChange;
+        event EventHandler<FileSystemChange> OnChange;
         void Start();
     }
 }

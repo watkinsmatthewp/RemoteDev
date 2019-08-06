@@ -13,10 +13,10 @@ namespace RemoteDev.Core.FileWatching
     {
         readonly FileSystemWatcher _frameworkFileWatcher;
         readonly Timer _eventTimer;
-        readonly ConcurrentQueue<FileChange> _eventQueue = new ConcurrentQueue<FileChange>();
+        readonly ConcurrentQueue<FileSystemChange> _eventQueue = new ConcurrentQueue<FileSystemChange>();
         readonly IRemoteDevLogger _logger;
 
-        public event EventHandler<FileChange> OnChange;
+        public event EventHandler<FileSystemChange> OnChange;
         public FileWatcherConfig Config { get; private set; }
 
         public FileWatcher(FileWatcherConfig config, IRemoteDevLogger logger)
@@ -52,26 +52,42 @@ namespace RemoteDev.Core.FileWatching
         {
             var relativePath = GetRelativePath(e.FullPath);
             _logger.Log(LogLevel.DEBUG, $"Received FS {e.ChangeType} event for {relativePath}");
-
+            
             if (!ShouldIgnore(relativePath, false))
             {
-                _eventQueue.Enqueue(CreateFileChange(ConvertFileChangeType(e.ChangeType), relativePath));
+                _eventQueue.Enqueue(CreateSystemFileChange(ConvertFileChangeType(e.ChangeType), relativePath, e.FullPath));
             }
         }
 
         void HandleRename(object sender, RenamedEventArgs e)
         {
+            var creationChange = null as FileSystemChange;
+            var deletionChange = null as FileSystemChange;
+
             var oldRelativePath = GetRelativePath(e.OldFullPath);
             var newRelativePath = GetRelativePath(e.FullPath);
             _logger.Log(LogLevel.DEBUG, $"Received FS rename event {oldRelativePath} => newRelativePath");
 
-            if (!ShouldIgnore(oldRelativePath, true))
-            {
-                _eventQueue.Enqueue(CreateFileChange(FileChangeType.Deleted, oldRelativePath));
-            }
+            // Create the delete/create events that will represent the rename
             if (!ShouldIgnore(newRelativePath, true))
             {
-                _eventQueue.Enqueue(CreateFileChange(FileChangeType.Created, newRelativePath));
+                creationChange = CreateSystemFileChange(FileSystemChangeType.Created, newRelativePath, e.FullPath);
+            }
+            if (!ShouldIgnore(oldRelativePath, true))
+            {
+                // Apply the creation type to the deletion (since otherwise it's unknown)
+                deletionChange = CreateSystemFileChange(FileSystemChangeType.Deleted, oldRelativePath, e.OldFullPath);
+                deletionChange.FileSystemEntityType = creationChange?.FileSystemEntityType ?? FileSystemEntityType.Unknown;
+            }
+
+            // Enqueue the changes in the correct order
+            if (deletionChange != null)
+            {
+                _eventQueue.Enqueue(deletionChange);
+            }
+            if (creationChange != null)
+            {
+                _eventQueue.Enqueue(creationChange);
             }
         }
 
@@ -88,23 +104,38 @@ namespace RemoteDev.Core.FileWatching
 
         string GetRelativePath(string fullPath) => fullPath.Substring(Config.WorkingDirectory.Length + 1);
 
-        static FileChangeType ConvertFileChangeType(WatcherChangeTypes frameworkChangeType)
+        static FileSystemChangeType ConvertFileChangeType(WatcherChangeTypes frameworkChangeType)
         {
             switch (frameworkChangeType)
             {
-                case WatcherChangeTypes.Created: return FileChangeType.Created;
-                case WatcherChangeTypes.Deleted: return FileChangeType.Deleted;
-                case WatcherChangeTypes.Changed: return FileChangeType.Modified;
-                default: throw new ArgumentException($"Cannot convert {frameworkChangeType} to exactly one {nameof(FileChangeType)}");
+                case WatcherChangeTypes.Created: return FileSystemChangeType.Created;
+                case WatcherChangeTypes.Deleted: return FileSystemChangeType.Deleted;
+                case WatcherChangeTypes.Changed: return FileSystemChangeType.Modified;
+                default: throw new ArgumentException($"Cannot convert {frameworkChangeType} to exactly one {nameof(FileSystemChangeType)}");
             }
         }
 
-        static FileChange CreateFileChange(FileChangeType fileChangeType, string relativePath) => new FileChange
+        static FileSystemChange CreateSystemFileChange(FileSystemChangeType fileChangeType, string relativePath, string absolutePath)
         {
-            FileChangeType = fileChangeType,
-            RelativePathComponents = relativePath.Split(Path.DirectorySeparatorChar),
-            FileEntityType = FileEntityType.File
-        };
+            var fileSystemChange = new FileSystemChange
+            {
+                FileSystemChangeType = fileChangeType,
+                RelativePathComponents = relativePath.Split(Path.DirectorySeparatorChar),
+                FileSystemEntityType = FileSystemEntityType.Unknown
+            };
+
+            try
+            {
+                fileSystemChange.FileSystemEntityType = File.GetAttributes(absolutePath).HasFlag(FileAttributes.Directory)
+                    ? FileSystemEntityType.Directory : FileSystemEntityType.File;
+            }
+            catch (Exception)
+            {
+                // Not enough info to set the FileSystemEntityType to something known
+            }
+
+            return fileSystemChange;
+        }
 
         void OnTimerTick(object sender, ElapsedEventArgs e)
         {
@@ -112,14 +143,14 @@ namespace RemoteDev.Core.FileWatching
             var processedEventHashCodes = new HashSet<int>();
             while (!_eventQueue.IsEmpty)
             {
-                if (_eventQueue.TryDequeue(out FileChange fileChangeEvent))
+                if (_eventQueue.TryDequeue(out FileSystemChange fileSystemChangeEvent))
                 {
-                    var hashCode = fileChangeEvent.GetHashCode();
-                    _logger.Log(LogLevel.TRACE, $"Popped file change event {hashCode} from queue");
+                    var hashCode = fileSystemChangeEvent.GetHashCode();
+                    _logger.Log(LogLevel.TRACE, $"Popped {fileSystemChangeEvent.FileSystemEntityType} {fileSystemChangeEvent.FileSystemChangeType} event {hashCode} from queue");
                     if (processedEventHashCodes.Add(hashCode))
                     {
                         _logger.Log(LogLevel.TRACE, $"{hashCode} is a new event. Invoking {nameof(OnChange)}");
-                        OnChange?.Invoke(this, fileChangeEvent);
+                        OnChange?.Invoke(this, fileSystemChangeEvent);
                     }
                 }
             }

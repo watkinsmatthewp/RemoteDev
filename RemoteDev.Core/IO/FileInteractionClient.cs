@@ -16,7 +16,9 @@ namespace RemoteDev.Core.IO
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        public abstract void Put(string relativePath, Stream file);
-        public abstract void Delete(string relativePath);
+        public abstract void PutFile(string relativePath, Stream file);
+        public abstract void CreateDirectory(string relativePath);
+        public abstract void DeleteFile(string relativePath);
+        public abstract void DeleteDirectory(string relativePath);
     }
 }

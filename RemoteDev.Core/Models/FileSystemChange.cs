@@ -2,15 +2,15 @@
 
 namespace RemoteDev.Core.Models
 {
-    public class FileChange
+    public class FileSystemChange
     {
-        public FileEntityType FileEntityType { get; set; }
-        public FileChangeType FileChangeType { get; set; }
+        public FileSystemEntityType FileSystemEntityType { get; set; }
+        public FileSystemChangeType FileSystemChangeType { get; set; }
         public string[] RelativePathComponents { get; set; }
 
         public string GetRelativePath() => Path.Combine(RelativePathComponents);
         public string GetRelativePath(char directorySeparatorChar) => string.Join(directorySeparatorChar, RelativePathComponents);
 
-        public override int GetHashCode() => (string.Join("", RelativePathComponents) + FileChangeType + FileEntityType).GetHashCode();
+        public override int GetHashCode() => (string.Join("", RelativePathComponents) + FileSystemChangeType + FileSystemEntityType).GetHashCode();
     }
 }

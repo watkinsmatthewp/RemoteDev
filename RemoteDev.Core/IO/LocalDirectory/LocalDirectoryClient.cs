@@ -14,7 +14,7 @@ namespace RemoteDev.Core.IO.LocalDirectory
             }
         }
 
-        public override void Delete(string relativePath)
+        public override void DeleteFile(string relativePath)
         {
             try
             {
@@ -27,7 +27,20 @@ namespace RemoteDev.Core.IO.LocalDirectory
             }
         }
 
-        public override void Put(string relativePath, Stream file)
+        public override void DeleteDirectory(string relativePath)
+        {
+            try
+            {
+                _logger.Log(LogLevel.DEBUG, $"DIR: Deleting directory {relativePath} on the remote path");
+                Directory.Delete(CreateAbsolutePath(relativePath));
+            }
+            catch (DirectoryNotFoundException)
+            {
+                _logger.Log(LogLevel.WARN, $"DIR: Could not find directory {relativePath} remote path. Could not delete");
+            }
+        }
+
+        public override void PutFile(string relativePath, Stream file)
         {
             _logger.Log(LogLevel.DEBUG, $"DIR: Copying file {relativePath} to the remote path");
             using (file)
@@ -35,6 +48,11 @@ namespace RemoteDev.Core.IO.LocalDirectory
             {
                 file.CopyTo(fs);
             }
+        }
+
+        public override void CreateDirectory(string relativePath)
+        {
+            Directory.CreateDirectory(CreateAbsolutePath(relativePath));
         }
 
         string CreateAbsolutePath(string relativePath) => Path.Join(Options.Path, relativePath);

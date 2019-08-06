@@ -4,7 +4,9 @@ namespace RemoteDev.Core.IO
 {
     public interface IFileInteractionClient
     {
-        void Put(string relativePath, Stream file);
-        void Delete(string relativePath);
+        void PutFile(string relativePath, Stream file);
+        void CreateDirectory(string relativePath);
+        void DeleteFile(string relativePath);
+        void DeleteDirectory(string relativePath);
     }
 }

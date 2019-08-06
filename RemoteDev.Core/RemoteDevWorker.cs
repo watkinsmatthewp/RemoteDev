@@ -28,37 +28,84 @@ namespace RemoteDev.Core
 
         #region Private helpers
 
-        void HandleOnChangeEvent(object sender, FileChange fileChange)
+        void HandleOnChangeEvent(object sender, FileSystemChange fileSystemChange)
         {
-            var relativePath = fileChange.GetRelativePath();
-            _logger.Log(LogLevel.DEBUG, $"Worker received {fileChange.FileChangeType} event for {relativePath}");
+            var relativePath = fileSystemChange.GetRelativePath();
+            _logger.Log(LogLevel.DEBUG, $"Worker received {fileSystemChange.FileSystemEntityType} {fileSystemChange.FileSystemChangeType} event for {relativePath}");
 
-            switch (fileChange.FileChangeType)
+            if (fileSystemChange.FileSystemEntityType == FileSystemEntityType.File)
             {
-                case FileChangeType.Deleted:
+                if (fileSystemChange.FileSystemChangeType == FileSystemChangeType.Deleted)
                 {
-                    _logger.Log(LogLevel.DEBUG, "About to delete " + relativePath);
-                    _fileClient.Delete(relativePath);
-                    break;
+                    DeleteFile(relativePath);
                 }
-                default:
+                else
                 {
-                    var absolutePath = Path.Combine(_fileWatcher.Config.WorkingDirectory, relativePath);
-                    if (File.Exists(absolutePath))
-                    {
-                        _logger.Log(LogLevel.DEBUG, "About to put " + relativePath);
-                        using (var fs = File.OpenRead(absolutePath))
-                        {
-                            _fileClient.Put(relativePath, fs);
-                        }
-                    }
-                    else
-                    {
-                        _logger.Log(LogLevel.WARN, "Cannot put file as it does not exist: " + relativePath);
-                    }
-                    break;
+                    PutFile(relativePath);
                 }
             }
+            else if (fileSystemChange.FileSystemEntityType == FileSystemEntityType.Directory)
+            {
+                if (fileSystemChange.FileSystemChangeType == FileSystemChangeType.Deleted)
+                {
+                    DeleteDirectory(relativePath);
+                }
+                else if (fileSystemChange.FileSystemChangeType == FileSystemChangeType.Created)
+                {
+                    CreateDirectory(relativePath);
+                }
+                else
+                {
+                    _logger.Log(LogLevel.DEBUG, $"No need to process {fileSystemChange.FileSystemEntityType} {fileSystemChange.FileSystemChangeType} for {relativePath}");
+                }
+            }
+            else
+            {
+                if (fileSystemChange.FileSystemChangeType == FileSystemChangeType.Deleted)
+                {
+                    DeleteFile(relativePath);
+                    DeleteDirectory(relativePath);
+                }
+                else
+                {
+                    _logger.Log(LogLevel.WARN, $"Cannot to process {fileSystemChange.FileSystemEntityType} {fileSystemChange.FileSystemChangeType} for {relativePath}");
+                }
+            }
+        }
+
+        void CreateDirectory(string relativePath)
+        {
+            _logger.Log(LogLevel.DEBUG, "About to create directory " + relativePath);
+            _fileClient.CreateDirectory(relativePath);
+        }
+
+        void DeleteDirectory(string relativePath)
+        {
+            _logger.Log(LogLevel.DEBUG, "About to try delete directory " + relativePath);
+            _fileClient.DeleteDirectory(relativePath);
+        }
+
+        void PutFile(string relativePath)
+        {
+            _logger.Log(LogLevel.DEBUG, "About to put file " + relativePath);
+            var absolutePath = Path.Combine(_fileWatcher.Config.WorkingDirectory, relativePath);
+            try
+            {
+                using (var fs = File.OpenRead(absolutePath))
+                {
+                    _fileClient.PutFile(relativePath, fs);
+                }
+            }
+            catch (FileNotFoundException)
+            {
+                _logger.Log(LogLevel.WARN, $"Cannot put file {relativePath} since it does not exist.");
+            }
+        }
+
+        void DeleteFile(string relativePath)
+        {
+            _logger.Log(LogLevel.DEBUG, "About to try delete file " + relativePath);
+            _fileClient.DeleteFile(relativePath);
         }
 
         #endregion
