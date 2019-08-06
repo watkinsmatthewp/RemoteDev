@@ -5,6 +5,7 @@ using RemoteDev.Core.FileWatching;
 using RemoteDev.Core.IO;
 using RemoteDev.Core.IO.LocalDirectory;
 using RemoteDev.Core.IO.SFTP;
+using RemoteDev.Core.Loggers;
 using RemoteDev.Options;
 using System;
 using System.Collections.Generic;
@@ -31,7 +32,8 @@ namespace RemoteDev
                 Path = syncDirectoryVerbOptions.Remote
             };
 
-            Run(syncDirectoryVerbOptions, new LocalDirectoryClient(options));
+            var logger = BuildLogger(syncDirectoryVerbOptions);
+            Run(syncDirectoryVerbOptions, new LocalDirectoryClient(options, logger), logger);
         }
 
         static void RunSftpSync(SyncSftpVerbOptions syncSftpVerbOptions)
@@ -50,7 +52,8 @@ namespace RemoteDev
                 options.Password = ReadPassword();
             }
 
-            Run(syncSftpVerbOptions, new SftpClient(options));
+            var logger = BuildLogger(syncSftpVerbOptions);
+            Run(syncSftpVerbOptions, new SftpClient(options, logger), logger);
         }
 
         static string ReadPassword()
@@ -82,18 +85,22 @@ namespace RemoteDev
             return sb.ToString();
         }
 
-        static void Run(ProgramOptions programOptions, IFileInteractionClient target)
+        static IRemoteDevLogger BuildLogger(ProgramOptions programOptions) => new RemoteDevConsoleLogger(new RemoteDevLoggerConfig
+        {
+            MinimumLogLevel = programOptions.Verbose ? LogLevel.TRACE : LogLevel.INFO,
+        });
+
+        static void Run(ProgramOptions programOptions, IFileInteractionClient target, IRemoteDevLogger logger)
         {
             var watcher = new FileWatcher(new FileWatcherConfig
             {
                 WorkingDirectory = programOptions.WorkingDirectory,
-                Verbose = programOptions.Verbose,
                 MillisecondDelay = programOptions.MillisecondsDelay,
                 ExclusionFilters = ReadGitIgnoreExclusions(programOptions.WorkingDirectory).ToList()
-            });
+            }, logger);
 
             // Start watching files
-            new RemoteDevWorker(watcher, target).Start();
+            new RemoteDevWorker(watcher, target, logger).Start();
 
             Console.WriteLine("Monitoring. Press any key to stop.");
             Console.ReadLine();

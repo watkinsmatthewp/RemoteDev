@@ -1,4 +1,5 @@
-﻿using Renci.SshNet;
+﻿using RemoteDev.Core.Loggers;
+using Renci.SshNet;
 using System;
 using System.IO;
 using RenciSftpClient = Renci.SshNet.SftpClient;
@@ -9,7 +10,7 @@ namespace RemoteDev.Core.IO.SFTP
     {
         readonly Lazy<RenciSftpClient> _sftpClient;
 
-        public SftpClient(SftpClientConfiguration options) : base(options)
+        public SftpClient(SftpClientConfiguration options, IRemoteDevLogger logger) : base(options, logger)
         {
             _sftpClient = new Lazy<RenciSftpClient>(InstantiateClient);
         }

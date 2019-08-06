@@ -1,3 +1,4 @@
+using RemoteDev.Core.Loggers;
 using System;
 using System.IO;
 
@@ -5,7 +6,7 @@ namespace RemoteDev.Core.IO.LocalDirectory
 {
     public class LocalDirectoryClient : FileInteractionClient<LocalDirectoryClientConfiguration>
     {        
-        public LocalDirectoryClient(LocalDirectoryClientConfiguration options) : base(options)
+        public LocalDirectoryClient(LocalDirectoryClientConfiguration options, IRemoteDevLogger logger) : base(options, logger)
         {
             if (string.IsNullOrWhiteSpace(options.Path))
             {

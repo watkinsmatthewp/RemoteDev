@@ -1,4 +1,5 @@
-﻿using RemoteDev.Core.Models;
+﻿using RemoteDev.Core.Loggers;
+using RemoteDev.Core.Models;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -10,16 +11,18 @@ namespace RemoteDev.Core.FileWatching
 {
     public class FileWatcher : IFileWatcher
     {
-        FileSystemWatcher _frameworkFileWatcher;
-        Timer _eventTimer;
-        ConcurrentQueue<FileChange> _eventQueue = new ConcurrentQueue<FileChange>();
+        readonly FileSystemWatcher _frameworkFileWatcher;
+        readonly Timer _eventTimer;
+        readonly ConcurrentQueue<FileChange> _eventQueue = new ConcurrentQueue<FileChange>();
+        readonly IRemoteDevLogger _logger;
 
         public event EventHandler<FileChange> OnChange;
         public FileWatcherConfig Config { get; private set; }
 
-        public FileWatcher(FileWatcherConfig config)
+        public FileWatcher(FileWatcherConfig config, IRemoteDevLogger logger)
         {
             Config = config ?? throw new ArgumentNullException(nameof(config));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
             // Create the event delay timer
             _eventTimer = new Timer(Config.MillisecondDelay) { AutoReset = false };
@@ -73,7 +76,7 @@ namespace RemoteDev.Core.FileWatching
         {
             if (Config.ExclusionFilters?.Any(f => f.IsMatch(relativePath, isFile)) == true)
             {
-                Config.Log($"Ignoring file change for {relativePath}");
+                _logger.Log(LogLevel.INFO, $"Ignoring file change for {relativePath}");
                 return true;
             }
 
