@@ -17,11 +17,13 @@ namespace RemoteDev.Core.IO.SFTP
 
         public override void Delete(string relativePath)
         {
+            _logger.Log(LogLevel.DEBUG, $"SFTP: Deleting {relativePath} on the remote");
             _sftpClient.Value.Delete(relativePath);
         }
 
         public override void Put(string relativePath, Stream file)
         {
+            _logger.Log(LogLevel.DEBUG, $"SFTP: Uploading file {relativePath} to the remote");
             _sftpClient.Value.UploadFile(file, relativePath.Replace("\\", "/"));
         }
 

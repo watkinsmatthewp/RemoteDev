@@ -87,7 +87,7 @@ namespace RemoteDev
 
         static IRemoteDevLogger BuildLogger(ProgramOptions programOptions) => new RemoteDevConsoleLogger(new RemoteDevLoggerConfig
         {
-            MinimumLogLevel = programOptions.Verbose ? LogLevel.TRACE : LogLevel.INFO,
+            MinimumLogLevel = programOptions.Verbosity
         });
 
         static void Run(ProgramOptions programOptions, IFileInteractionClient target, IRemoteDevLogger logger)
@@ -96,17 +96,18 @@ namespace RemoteDev
             {
                 WorkingDirectory = programOptions.WorkingDirectory,
                 MillisecondDelay = programOptions.MillisecondsDelay,
-                ExclusionFilters = ReadGitIgnoreExclusions(programOptions.WorkingDirectory).ToList()
+                ExclusionFilters = ReadGitIgnoreExclusions(programOptions.WorkingDirectory, logger).ToList()
             }, logger);
 
             // Start watching files
+            Console.WriteLine("Starting file monitor");
             new RemoteDevWorker(watcher, target, logger).Start();
 
             Console.WriteLine("Monitoring. Press any key to stop.");
             Console.ReadLine();
         }
 
-        static IEnumerable<IFilePathFilter> ReadGitIgnoreExclusions(string rootDirectoryPath)
+        static IEnumerable<IFilePathFilter> ReadGitIgnoreExclusions(string rootDirectoryPath, IRemoteDevLogger logger)
         {
             // Always ignore .git folder
             yield return new GlobFilePathFilter(".git");
@@ -116,6 +117,9 @@ namespace RemoteDev
             var gitIgnorePath = Path.Combine(rootDirectoryPath, ".gitignore");
             if (File.Exists(gitIgnorePath))
             {
+                logger.Log(LogLevel.INFO, $"Using the gitignore found in {gitIgnorePath}");
+                var filterCount = 0;
+
                 using (var fs = File.OpenRead(gitIgnorePath))
                 using (var reader = new StreamReader(fs))
                 {
@@ -124,14 +128,17 @@ namespace RemoteDev
                         var filter = GitIgnoreParser.ParseLine(reader.ReadLine());
                         if (filter != null)
                         {
+                            filterCount++;
                             yield return filter;
                         }
                     }
                 }
+
+                logger.Log(LogLevel.INFO, $"Found {filterCount} blob filters in the gitignore file");
             }
             else
             {
-                Console.WriteLine($"WARNING: No .gitignore found in root directory.");
+                logger.Log(LogLevel.WARN, "No .gitignore found in root directory. No file/folder changes will be ignored");
             }
         }
     }

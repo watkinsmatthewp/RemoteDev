@@ -31,12 +31,13 @@ namespace RemoteDev.Core
         void HandleOnChangeEvent(object sender, FileChange fileChange)
         {
             var relativePath = fileChange.GetRelativePath();
-            _logger.Log(LogLevel.DEBUG, $"{fileChange.FileChangeType}: {relativePath}");
+            _logger.Log(LogLevel.DEBUG, $"Worker received {fileChange.FileChangeType} event for {relativePath}");
 
             switch (fileChange.FileChangeType)
             {
                 case FileChangeType.Deleted:
                 {
+                    _logger.Log(LogLevel.DEBUG, "About to delete " + relativePath);
                     _fileClient.Delete(relativePath);
                     break;
                 }
@@ -45,10 +46,15 @@ namespace RemoteDev.Core
                     var absolutePath = Path.Combine(_fileWatcher.Config.WorkingDirectory, relativePath);
                     if (File.Exists(absolutePath))
                     {
+                        _logger.Log(LogLevel.DEBUG, "About to put " + relativePath);
                         using (var fs = File.OpenRead(absolutePath))
                         {
                             _fileClient.Put(relativePath, fs);
                         }
+                    }
+                    else
+                    {
+                        _logger.Log(LogLevel.WARN, "Cannot put file as it does not exist: " + relativePath);
                     }
                     break;
                 }

@@ -51,6 +51,8 @@ namespace RemoteDev.Core.FileWatching
         void HandleNonRenameChange(object sender, FileSystemEventArgs e)
         {
             var relativePath = GetRelativePath(e.FullPath);
+            _logger.Log(LogLevel.DEBUG, $"Received FS {e.ChangeType} event for {relativePath}");
+
             if (!ShouldIgnore(relativePath, false))
             {
                 _eventQueue.Enqueue(CreateFileChange(ConvertFileChangeType(e.ChangeType), relativePath));
@@ -60,13 +62,14 @@ namespace RemoteDev.Core.FileWatching
         void HandleRename(object sender, RenamedEventArgs e)
         {
             var oldRelativePath = GetRelativePath(e.OldFullPath);
-            if (!ShouldIgnore(oldRelativePath, false))
+            var newRelativePath = GetRelativePath(e.FullPath);
+            _logger.Log(LogLevel.DEBUG, $"Received FS rename event {oldRelativePath} => newRelativePath");
+
+            if (!ShouldIgnore(oldRelativePath, true))
             {
                 _eventQueue.Enqueue(CreateFileChange(FileChangeType.Deleted, oldRelativePath));
             }
-
-            var newRelativePath = GetRelativePath(e.FullPath);
-            if (!ShouldIgnore(newRelativePath, false))
+            if (!ShouldIgnore(newRelativePath, true))
             {
                 _eventQueue.Enqueue(CreateFileChange(FileChangeType.Created, newRelativePath));
             }
@@ -105,15 +108,23 @@ namespace RemoteDev.Core.FileWatching
 
         void OnTimerTick(object sender, ElapsedEventArgs e)
         {
+            _logger.Log(LogLevel.TRACE, "Timer ticked");
             var processedEventHashCodes = new HashSet<int>();
             while (!_eventQueue.IsEmpty)
             {
-                if (_eventQueue.TryDequeue(out FileChange fileChangeEvent) && processedEventHashCodes.Add(fileChangeEvent.GetHashCode()))
+                if (_eventQueue.TryDequeue(out FileChange fileChangeEvent))
                 {
-                    OnChange?.Invoke(this, fileChangeEvent);
+                    var hashCode = fileChangeEvent.GetHashCode();
+                    _logger.Log(LogLevel.TRACE, $"Popped file change event {hashCode} from queue");
+                    if (processedEventHashCodes.Add(hashCode))
+                    {
+                        _logger.Log(LogLevel.TRACE, $"{hashCode} is a new event. Invoking {nameof(OnChange)}");
+                        OnChange?.Invoke(this, fileChangeEvent);
+                    }
                 }
             }
 
+            _logger.Log(LogLevel.TRACE, "Restarting timer");
             _eventTimer.Start();
         }
 

@@ -14,7 +14,7 @@ namespace RemoteDev.Core.Loggers
 
         public void Log(LogLevel logLevel, string message)
         {
-            if (logLevel >= _configuration.MinimumLogLevel)
+            if (logLevel <= _configuration.MinimumLogLevel)
             {
                 LogMessage(BuildMessage(logLevel, message));
             }
