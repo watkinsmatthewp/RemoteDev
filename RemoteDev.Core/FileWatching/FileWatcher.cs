@@ -15,7 +15,8 @@ namespace RemoteDev.Core.FileWatching
         readonly FileSystemWatcher _frameworkDirectoryWatcher;
 
         readonly Timer _eventTimer;
-        readonly ConcurrentQueue<FileSystemChange> _eventQueue = new ConcurrentQueue<FileSystemChange>();
+        readonly ConcurrentQueue<FileSystemChange> _fileEventQueue = new ConcurrentQueue<FileSystemChange>();
+        readonly ConcurrentQueue<FileSystemChange> _directoryEventQueue = new ConcurrentQueue<FileSystemChange>();
         readonly IRemoteDevLogger _logger;
 
         public event EventHandler<FileSystemChange> OnChange;
@@ -71,7 +72,7 @@ namespace RemoteDev.Core.FileWatching
             
             if (!ShouldIgnore(relativePath, false))
             {
-                _eventQueue.Enqueue(CreateSystemFileChange(sender, ConvertFileChangeType(e.ChangeType), relativePath, e.FullPath));
+                QueueFileSystemChangeEvent(CreateSystemFileChange(sender, ConvertFileSystemChangeType(e.ChangeType), relativePath, e.FullPath));
             }
         }
 
@@ -84,12 +85,18 @@ namespace RemoteDev.Core.FileWatching
             // Send the delete/create events that will represent the rename
             if (!ShouldIgnore(oldRelativePath, true))
             {
-                _eventQueue.Enqueue(CreateSystemFileChange(sender, FileSystemChangeType.Deleted, oldRelativePath, e.OldFullPath));
+                QueueFileSystemChangeEvent(CreateSystemFileChange(sender, FileSystemChangeType.Deleted, oldRelativePath, e.OldFullPath));
             }
             if (!ShouldIgnore(oldRelativePath, true))
             {
-                _eventQueue.Enqueue(CreateSystemFileChange(sender, FileSystemChangeType.Created, newRelativePath, e.OldFullPath));
+                QueueFileSystemChangeEvent(CreateSystemFileChange(sender, FileSystemChangeType.Created, newRelativePath, e.OldFullPath));
             }
+        }
+
+        void QueueFileSystemChangeEvent(FileSystemChange fileSystemChange)
+        {
+            var queue = fileSystemChange.FileSystemEntityType == FileSystemEntityType.Directory ? _directoryEventQueue : _fileEventQueue;
+            queue.Enqueue(fileSystemChange);
         }
 
         bool ShouldIgnore(string relativePath, bool isFile)
@@ -105,7 +112,7 @@ namespace RemoteDev.Core.FileWatching
 
         string GetRelativePath(string fullPath) => fullPath.Substring(Config.WorkingDirectory.Length + 1);
 
-        static FileSystemChangeType ConvertFileChangeType(WatcherChangeTypes frameworkChangeType)
+        static FileSystemChangeType ConvertFileSystemChangeType(WatcherChangeTypes frameworkChangeType)
         {
             switch (frameworkChangeType)
             {
@@ -127,22 +134,33 @@ namespace RemoteDev.Core.FileWatching
         {
             _logger.Log(LogLevel.TRACE, "Timer ticked");
             var processedEventHashCodes = new HashSet<int>();
-            while (!_eventQueue.IsEmpty)
+
+            while (!_fileEventQueue.IsEmpty || _directoryEventQueue.IsEmpty)
             {
-                if (_eventQueue.TryDequeue(out FileSystemChange fileSystemChangeEvent))
+                if (_fileEventQueue.TryDequeue(out FileSystemChange fileChangeEvent))
                 {
-                    var hashCode = fileSystemChangeEvent.GetHashCode();
-                    _logger.Log(LogLevel.TRACE, $"Popped {fileSystemChangeEvent.FileSystemEntityType} {fileSystemChangeEvent.FileSystemChangeType} event {hashCode} from queue");
-                    if (processedEventHashCodes.Add(hashCode))
-                    {
-                        _logger.Log(LogLevel.TRACE, $"{hashCode} is a new event. Invoking {nameof(OnChange)}");
-                        OnChange?.Invoke(this, fileSystemChangeEvent);
-                    }
+                    PromoteFileSystemChange(processedEventHashCodes, fileChangeEvent);
+                }
+                else if (_directoryEventQueue.TryDequeue(out FileSystemChange directoryChangeEvent))
+                {
+                    // Only run directory action if there was nothing in the file queue
+                    PromoteFileSystemChange(processedEventHashCodes, directoryChangeEvent);
                 }
             }
 
             _logger.Log(LogLevel.TRACE, "Restarting timer");
             _eventTimer.Start();
+        }
+
+        private void PromoteFileSystemChange(HashSet<int> processedEventHashCodes, FileSystemChange fileSystemChangeEvent)
+        {
+            var hashCode = fileSystemChangeEvent.GetHashCode();
+            _logger.Log(LogLevel.TRACE, $"Popped {fileSystemChangeEvent.FileSystemEntityType} {fileSystemChangeEvent.FileSystemChangeType} event {hashCode} from queue");
+            if (processedEventHashCodes.Add(hashCode))
+            {
+                _logger.Log(LogLevel.TRACE, $"{hashCode} is a new event. Invoking {nameof(OnChange)}");
+                OnChange?.Invoke(this, fileSystemChangeEvent);
+            }
         }
 
         #endregion
