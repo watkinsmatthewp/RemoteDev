@@ -30,9 +30,20 @@ namespace RemoteDev.Core
 
         void HandleOnChangeEvent(object sender, FileSystemChange fileSystemChange)
         {
-            var relativePath = fileSystemChange.GetRelativePath();
-            _logger.Log(LogLevel.DEBUG, $"Worker received {fileSystemChange.FileSystemEntityType} {fileSystemChange.FileSystemChangeType} event for {relativePath}");
+            try
+            {
+                var relativePath = fileSystemChange.GetRelativePath();
+                _logger.Log(LogLevel.DEBUG, $"Worker received {fileSystemChange.FileSystemEntityType} {fileSystemChange.FileSystemChangeType} event for {relativePath}");
+                SendFileSystemChange(fileSystemChange, relativePath);
+            }
+            catch (Exception e)
+            {
+                _logger.Log(LogLevel.ERROR, e.ToString());
+            }
+        }
 
+        void SendFileSystemChange(FileSystemChange fileSystemChange, string relativePath)
+        {
             if (fileSystemChange.FileSystemEntityType == FileSystemEntityType.File)
             {
                 if (fileSystemChange.FileSystemChangeType == FileSystemChangeType.Deleted)
