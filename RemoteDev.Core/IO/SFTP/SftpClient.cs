@@ -82,10 +82,6 @@ namespace RemoteDev.Core.IO.SFTP
             if (!string.IsNullOrWhiteSpace(Options.RemoteWorkingDirectory))
             {
                 client.ChangeDirectory(Options.RemoteWorkingDirectory);
-                if (client.WorkingDirectory != Options.RemoteWorkingDirectory)
-                {
-                    throw new Exception("SFTP: Do not match");
-                }
             }
 
             return client;
