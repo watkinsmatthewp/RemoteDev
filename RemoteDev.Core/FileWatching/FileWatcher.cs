@@ -12,6 +12,8 @@ namespace RemoteDev.Core.FileWatching
     public class FileWatcher : IFileWatcher
     {
         readonly FileSystemWatcher _frameworkFileWatcher;
+        readonly FileSystemWatcher _frameworkDirectoryWatcher;
+
         readonly Timer _eventTimer;
         readonly ConcurrentQueue<FileSystemChange> _eventQueue = new ConcurrentQueue<FileSystemChange>();
         readonly IRemoteDevLogger _logger;
@@ -28,22 +30,36 @@ namespace RemoteDev.Core.FileWatching
             _eventTimer = new Timer(Config.MillisecondDelay) { AutoReset = false };
             _eventTimer.Elapsed += OnTimerTick;
 
-            // Create the framework-provided file system watcher
+            // Create the framework-provided file watcher
             _frameworkFileWatcher = new FileSystemWatcher(Config.WorkingDirectory)
             {
-                IncludeSubdirectories = Config.Recursive
+                IncludeSubdirectories = Config.Recursive,
+                NotifyFilter = NotifyFilters.FileName
             };
 
             _frameworkFileWatcher.Changed += HandleNonRenameChange;
             _frameworkFileWatcher.Created += HandleNonRenameChange;
             _frameworkFileWatcher.Deleted += HandleNonRenameChange;
             _frameworkFileWatcher.Renamed += HandleRename;
+
+            // Create the framework-provided directory wather
+            _frameworkDirectoryWatcher = new FileSystemWatcher(Config.WorkingDirectory)
+            {
+                IncludeSubdirectories = Config.Recursive,
+                NotifyFilter = NotifyFilters.DirectoryName
+            };
+
+            _frameworkDirectoryWatcher.Changed += HandleNonRenameChange;
+            _frameworkDirectoryWatcher.Created += HandleNonRenameChange;
+            _frameworkDirectoryWatcher.Deleted += HandleNonRenameChange;
+            _frameworkDirectoryWatcher.Renamed += HandleRename;
         }
 
         public void Start()
         {
             _eventTimer.Start();
             _frameworkFileWatcher.EnableRaisingEvents = true;
+            _frameworkDirectoryWatcher.EnableRaisingEvents = true;
         }
 
         #region Private helpers
@@ -55,39 +71,24 @@ namespace RemoteDev.Core.FileWatching
             
             if (!ShouldIgnore(relativePath, false))
             {
-                _eventQueue.Enqueue(CreateSystemFileChange(ConvertFileChangeType(e.ChangeType), relativePath, e.FullPath));
+                _eventQueue.Enqueue(CreateSystemFileChange(sender, ConvertFileChangeType(e.ChangeType), relativePath, e.FullPath));
             }
         }
 
         void HandleRename(object sender, RenamedEventArgs e)
         {
-            var creationChange = null as FileSystemChange;
-            var deletionChange = null as FileSystemChange;
-
             var oldRelativePath = GetRelativePath(e.OldFullPath);
             var newRelativePath = GetRelativePath(e.FullPath);
-            _logger.Log(LogLevel.DEBUG, $"Received FS rename event {oldRelativePath} => newRelativePath");
+            _logger.Log(LogLevel.DEBUG, $"Received FS rename event {oldRelativePath} => {newRelativePath}");
 
-            // Create the delete/create events that will represent the rename
-            if (!ShouldIgnore(newRelativePath, true))
+            // Send the delete/create events that will represent the rename
+            if (!ShouldIgnore(oldRelativePath, true))
             {
-                creationChange = CreateSystemFileChange(FileSystemChangeType.Created, newRelativePath, e.FullPath);
+                _eventQueue.Enqueue(CreateSystemFileChange(sender, FileSystemChangeType.Deleted, oldRelativePath, e.OldFullPath));
             }
             if (!ShouldIgnore(oldRelativePath, true))
             {
-                // Apply the creation type to the deletion (since otherwise it's unknown)
-                deletionChange = CreateSystemFileChange(FileSystemChangeType.Deleted, oldRelativePath, e.OldFullPath);
-                deletionChange.FileSystemEntityType = creationChange?.FileSystemEntityType ?? FileSystemEntityType.Unknown;
-            }
-
-            // Enqueue the changes in the correct order
-            if (deletionChange != null)
-            {
-                _eventQueue.Enqueue(deletionChange);
-            }
-            if (creationChange != null)
-            {
-                _eventQueue.Enqueue(creationChange);
+                _eventQueue.Enqueue(CreateSystemFileChange(sender, FileSystemChangeType.Created, newRelativePath, e.OldFullPath));
             }
         }
 
@@ -115,27 +116,12 @@ namespace RemoteDev.Core.FileWatching
             }
         }
 
-        static FileSystemChange CreateSystemFileChange(FileSystemChangeType fileChangeType, string relativePath, string absolutePath)
+        FileSystemChange CreateSystemFileChange(object sender, FileSystemChangeType fileChangeType, string relativePath, string absolutePath) => new FileSystemChange
         {
-            var fileSystemChange = new FileSystemChange
-            {
-                FileSystemChangeType = fileChangeType,
-                RelativePathComponents = relativePath.Split(Path.DirectorySeparatorChar),
-                FileSystemEntityType = FileSystemEntityType.Unknown
-            };
-
-            try
-            {
-                fileSystemChange.FileSystemEntityType = File.GetAttributes(absolutePath).HasFlag(FileAttributes.Directory)
-                    ? FileSystemEntityType.Directory : FileSystemEntityType.File;
-            }
-            catch (Exception)
-            {
-                // Not enough info to set the FileSystemEntityType to something known
-            }
-
-            return fileSystemChange;
-        }
+            FileSystemChangeType = fileChangeType,
+            RelativePathComponents = relativePath.Split(Path.DirectorySeparatorChar),
+            FileSystemEntityType = sender == _frameworkDirectoryWatcher ? FileSystemEntityType.Directory : FileSystemEntityType.File
+        };
 
         void OnTimerTick(object sender, ElapsedEventArgs e)
         {
